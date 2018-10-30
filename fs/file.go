@@ -5,6 +5,7 @@ package watch
 // supporting linux, android and unix
 import (
 	"os"
+	"syscall"
 	"time"
 )
 
@@ -77,6 +78,62 @@ func (f *File) Sync() error {
 	}
 	if e := f.pfd.Fsync(); e != nil {
 		return f.wrapErr("sync", e)
+	}
+	return nil
+}
+
+func Chtimes(name string, atime time.Time, mtime time.Time) error {
+	var utimes [2]syscall.Timespec
+	utimes[0] = syscall.NsecToTimespec(atime.UnixNano())
+	utimes[1] = syscall.NsecToTimespec(mtime.UnixNano())
+	if e := syscall.UtimesNano(fixLongPath(name), utimes[0:]); e != nil {
+		return &PathError{"chtimes", name, e}
+	}
+	return nil
+}
+
+// Chdir changes the current working directory to the file,
+// which must be a directory.
+// If there is an error, it will be of type *PathError.
+func (f *File) Chdir() error {
+	if err := f.checkValid("chdir"); err != nil {
+		return err
+	}
+	if e := f.pfd.Fchdir(); e != nil {
+		return f.wrapErr("chdir", e)
+	}
+	return nil
+}
+
+// setDeadline sets the read and write deadline.
+func (f *File) setDeadline(t time.Time) error {
+	if err := f.checkValid("SetDeadline"); err != nil {
+		return err
+	}
+	return f.pfd.SetDeadline(t)
+}
+
+// setReadDeadline sets the read deadline.
+func (f *File) setReadDeadline(t time.Time) error {
+	if err := f.checkValid("SetReadDeadline"); err != nil {
+		return err
+	}
+	return f.pfd.SetReadDeadline(t)
+}
+
+// setWriteDeadline sets the write deadline.
+func (f *File) setWriteDeadline(t time.Time) error {
+	if err := f.checkValid("SetWriteDeadline"); err != nil {
+		return err
+	}
+	return f.pfd.SetWriteDeadline(t)
+}
+
+// checkValid checks whether f is valid for use.
+// If not, it returns an appropriate error, perhaps incorporating the operation name op.
+func (f *File) checkValid(op string) error {
+	if f == nil {
+		return ErrInvalid
 	}
 	return nil
 }
