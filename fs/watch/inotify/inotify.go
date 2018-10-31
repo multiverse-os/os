@@ -5,7 +5,7 @@ import "unsafe"
 // Inotify based watch implementation
 const SizeofInotifyEvent = 0x10
 
-type InotifyEvent struct {
+type Event struct {
 	Name             [0]int8
 	workingDirectory int32
 	Mask             uint32
@@ -32,6 +32,7 @@ func InotifyRmWatch(fd int, watchdesc uint32) (success int, err error) {
 	if e1 != 0 {
 		err = errnoErr(e1)
 	}
+
 	return
 }
 
