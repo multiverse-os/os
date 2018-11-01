@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	inotify "github.com/multiverse-os/os/filesystem/watch/inotify"
+	linux "github.com/multiverse-os/os/linux"
 )
 
 type Options struct {
@@ -178,7 +179,7 @@ func (self *Watcher) FileDescriptorWithPath(path string) *FileDescriptor {
 func (self *Watcher) Watch() {
 	var buffer [inotify.EventSize * 4096]byte
 	for {
-		bytesRead, err := unix.Read(self.FileDescriptor, buffer[:])
+		bytesRead, err := linux.Read(self.FileDescriptor, buffer[:])
 		if bytesRead < inotify.EventSize {
 			self.Errors <- ErrIncompleteRead
 			continue
@@ -200,7 +201,7 @@ func (self *Watcher) Watch() {
 			var eventPath string
 			if rawEvent.Len > 0 {
 				// Grab the event name and make the event path
-				bytes := (*[unix.PathMax]byte)(unsafe.Pointer(&buffer[offset+inotify.EventSize]))
+				bytes := (*[linux.PathMax]byte)(unsafe.Pointer(&buffer[offset+inotify.EventSize]))
 				eventName = strings.TrimRight(string(bytes[0:rawEvent.Len]), "\000")
 				eventPath = CleanPath(JoinPath(fd.Path, eventName))
 			}
