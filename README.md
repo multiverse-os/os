@@ -111,25 +111,7 @@ library are all found in the `cmd/` folder.
 
 The current command-line tools provides are:
 
-  `fswatch`: A simple file and folder watcher, made to watch for changes and
-  execute a bash/sh command in response to all or specific changes, to all or
-  sppecific files in a folder. The `watch` library which it relies on, is built
-  to exclusively use inotify directly through syscalls (it does not require
-  standard Go `os` library or any external packages.)
-
-  `api`: An API server that provides programmatic access to a Server operating
-  system over a variety of interfaces including:
-      * **Filesystem** based API; for example, how `sysfs` or `procfs` allows
-        programmatic access to various aspects of the operating system by
-        interacting with system files.
-
-      * **REST API** served over HTTP, or Socket, using a variety of data
-        encoding formats such as `JSON`, `CBOR`, or `XML`. Using SSE for push
-        notifications.
-
-      * **GRPC** served in a variety of data encoding formats including `JSON`,
-        `CBOR`, and `XML`. **Implementation is still under discussion.**
-      
+     **fswatch** A simple tool to watch files for changes and execute a command 
 
 ### Contribute
 Contributions through pull requests are
