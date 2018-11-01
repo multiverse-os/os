@@ -1,4 +1,5 @@
-# *[Multiverse]* Go Operating System Library
+<p align="center"><img src="https://avatars2.githubusercontent.com/u/24763891?s=400&u=c1150e7da5667f47159d433d8e49dad99a364f5f&v=4" height="300" width="300"></p>
+<p align="center"><h2><em>[Multiverse]</em> Go Operating System Library</h2></p>
 **URL** [multiverse-os.org](https://multiverse-os.org)
 The Multiverse Go operating system (os) library is a drop-in replacement for the
 Go standard `os` library that provides a consistent, secure and only supports
