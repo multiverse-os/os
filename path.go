@@ -1,15 +1,22 @@
+// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package os
 
 import (
 	"syscall"
 )
 
-const (
-	PathSeparator     = '/' // OS-specific path separator
-	PathListSeparator = ':' // OS-specific path list separator
-)
-
+// MkdirAll creates a directory named path,
+// along with any necessary parents, and returns nil,
+// or else returns an error.
+// The permission bits perm (before umask) are used for all
+// directories that MkdirAll creates.
+// If path is already a directory, MkdirAll does nothing
+// and returns nil.
 func MkdirAll(path string, perm FileMode) error {
+	// Fast path: if we can tell whether path is a directory or file, stop with success or error.
 	dir, err := Stat(path)
 	if err == nil {
 		if dir.IsDir() {
@@ -17,6 +24,8 @@ func MkdirAll(path string, perm FileMode) error {
 		}
 		return &PathError{"mkdir", path, syscall.ENOTDIR}
 	}
+
+	// Slow path: make sure parent exists and then call Mkdir for path.
 	i := len(path)
 	for i > 0 && IsPathSeparator(path[i-1]) { // Skip trailing path separator.
 		i--
@@ -28,14 +37,18 @@ func MkdirAll(path string, perm FileMode) error {
 	}
 
 	if j > 1 {
+		// Create parent.
 		err = MkdirAll(fixRootDirectory(path[:j-1]), perm)
 		if err != nil {
 			return err
 		}
 	}
 
+	// Parent now exists; invoke Mkdir and use its result.
 	err = Mkdir(path, perm)
 	if err != nil {
+		// Handle arguments like "foo/." by
+		// double-checking that directory doesn't exist.
 		dir, err1 := Lstat(path)
 		if err1 == nil && dir.IsDir() {
 			return nil
@@ -45,9 +58,17 @@ func MkdirAll(path string, perm FileMode) error {
 	return nil
 }
 
+// removeAllTestHook is a hook for testing.
 var removeAllTestHook = func(err error) error { return err }
 
-func RemoveAll(path string) error { return removeAll(path) }
+// RemoveAll removes path and any children it contains.
+// It removes everything it can but returns the first error
+// it encounters. If the path does not exist, RemoveAll
+// returns nil (no error).
+// If there is an error, it will be of type *PathError.
+func RemoveAll(path string) error {
+	return removeAll(path)
+}
 
 // endsWithDot reports whether the final component of path is ".".
 func endsWithDot(path string) bool {
@@ -59,48 +80,3 @@ func endsWithDot(path string) bool {
 	}
 	return false
 }
-
-func IsPathSeparator(c uint8) bool {
-	return PathSeparator == c
-}
-
-func basename(name string) string {
-	i := len(name) - 1
-	for ; i > 0 && name[i] == '/'; i-- {
-		name = name[:i]
-	}
-	for i--; i >= 0; i-- {
-		if name[i] == '/' {
-			name = name[i+1:]
-			break
-		}
-	}
-	return name
-}
-
-func splitPath(path string) (string, string) {
-	dirname := "."
-	for len(path) > 1 && path[0] == '/' && path[1] == '/' {
-		path = path[1:]
-	}
-	i := len(path) - 1
-	for ; i > 0 && path[i] == '/'; i-- {
-		path = path[:i]
-	}
-	basename := path
-	for i--; i >= 0; i-- {
-		if path[i] == '/' {
-			if i == 0 {
-				dirname = path[:1]
-			} else {
-				dirname = path[:i]
-			}
-			basename = path[i+1:]
-			break
-		}
-	}
-
-	return dirname, basename
-}
-
-func fixRootDirectory(p string) string { return p }

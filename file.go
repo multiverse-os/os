@@ -1,3 +1,43 @@
+// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Package os provides a platform-independent interface to operating system
+// functionality. The design is Unix-like, although the error handling is
+// Go-like; failing calls return values of type error rather than error numbers.
+// Often, more information is available within the error. For example,
+// if a call that takes a file name fails, such as Open or Stat, the error
+// will include the failing file name when printed and will be of type
+// *PathError, which may be unpacked for more information.
+//
+// The os interface is intended to be uniform across all operating systems.
+// Features not generally available appear in the system-specific package syscall.
+//
+// Here is a simple example, opening a file and reading some of it.
+//
+//	file, err := os.Open("file.go") // For read access.
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+// If the open fails, the error string will be self-explanatory, like
+//
+//	open file.go: no such file or directory
+//
+// The file's data can then be read into a slice of bytes. Read and
+// Write take their byte counts from the length of the argument slice.
+//
+//	data := make([]byte, 100)
+//	count, err := file.Read(data)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	fmt.Printf("read %d bytes: %q\n", count, data[:count])
+//
+// Note: The maximum number of concurrent operations on a File may be limited by
+// the OS or the system. The number should be high, but exceeding it may degrade
+// performance or cause other issues.
+//
 package os
 
 import (
@@ -10,14 +50,23 @@ import (
 	"time"
 )
 
+// Name returns the name of the file as presented to Open.
 func (f *File) Name() string { return f.name }
 
+// Stdin, Stdout, and Stderr are open Files pointing to the standard input,
+// standard output, and standard error file descriptors.
+//
+// Note that the Go runtime writes to standard error for panics and crashes;
+// closing Stderr may cause those messages to go elsewhere, perhaps
+// to a file opened later.
 var (
 	Stdin  = NewFile(uintptr(syscall.Stdin), "/dev/stdin")
 	Stdout = NewFile(uintptr(syscall.Stdout), "/dev/stdout")
 	Stderr = NewFile(uintptr(syscall.Stderr), "/dev/stderr")
 )
 
+// Flags to OpenFile wrapping those of the underlying system. Not all
+// flags may be implemented on a given system.
 const (
 	// Exactly one of O_RDONLY, O_WRONLY, or O_RDWR must be specified.
 	O_RDONLY int = syscall.O_RDONLY // open the file read-only.
@@ -179,9 +228,6 @@ func (f *File) WriteString(s string) (n int, err error) {
 // bits (before umask).
 // If there is an error, it will be of type *PathError.
 func Mkdir(name string, perm FileMode) error {
-	if runtime.GOOS == "windows" && isWindowsNulName(name) {
-		return &PathError{"mkdir", name, syscall.ENOTDIR}
-	}
 	e := syscall.Mkdir(fixLongPath(name), syscallMode(perm))
 
 	if e != nil {
@@ -201,6 +247,7 @@ func Mkdir(name string, perm FileMode) error {
 	return nil
 }
 
+// setStickyBit adds ModeSticky to the permision bits of path, non atomic.
 func setStickyBit(name string) error {
 	fi, err := Stat(name)
 	if err != nil {
@@ -209,6 +256,8 @@ func setStickyBit(name string) error {
 	return Chmod(name, fi.Mode()|ModeSticky)
 }
 
+// Chdir changes the current working directory to the named directory.
+// If there is an error, it will be of type *PathError.
 func Chdir(dir string) error {
 	if e := syscall.Chdir(dir); e != nil {
 		testlog.Open(dir) // observe likely non-existent directory
@@ -223,14 +272,29 @@ func Chdir(dir string) error {
 	return nil
 }
 
+// Open opens the named file for reading. If successful, methods on
+// the returned file can be used for reading; the associated file
+// descriptor has mode O_RDONLY.
+// If there is an error, it will be of type *PathError.
 func Open(name string) (*File, error) {
 	return OpenFile(name, O_RDONLY, 0)
 }
 
+// Create creates or truncates the named file. If the file already exists,
+// it is truncated. If the file does not exist, it is created with mode 0666
+// (before umask). If successful, methods on the returned File can
+// be used for I/O; the associated file descriptor has mode O_RDWR.
+// If there is an error, it will be of type *PathError.
 func Create(name string) (*File, error) {
 	return OpenFile(name, O_RDWR|O_CREATE|O_TRUNC, 0666)
 }
 
+// OpenFile is the generalized open call; most users will use Open
+// or Create instead. It opens the named file with specified flag
+// (O_RDONLY etc.). If the file does not exist, and the O_CREATE flag
+// is passed, it is created with mode perm (before umask). If successful,
+// methods on the returned File can be used for I/O.
+// If there is an error, it will be of type *PathError.
 func OpenFile(name string, flag int, perm FileMode) (*File, error) {
 	testlog.Open(name)
 	f, err := openFileNolog(name, flag, perm)
@@ -242,10 +306,19 @@ func OpenFile(name string, flag int, perm FileMode) (*File, error) {
 	return f, nil
 }
 
+// lstat is overridden in tests.
 var lstat = Lstat
 
-func Rename(oldpath, newpath string) error { return rename(oldpath, newpath) }
+// Rename renames (moves) oldpath to newpath.
+// If newpath already exists and is not a directory, Rename replaces it.
+// OS-specific restrictions may apply when oldpath and newpath are in different directories.
+// If there is an error, it will be of type *LinkError.
+func Rename(oldpath, newpath string) error {
+	return rename(oldpath, newpath)
+}
 
+// Many functions in package syscall return a count of -1 instead of 0.
+// Using fixCount(call()) instead of call() corrects the count.
 func fixCount(n int, err error) (int, error) {
 	if n < 0 {
 		n = 0
@@ -253,6 +326,9 @@ func fixCount(n int, err error) (int, error) {
 	return n, err
 }
 
+// wrapErr wraps an error that occurred during an operation on an open file.
+// It passes io.EOF through unchanged, otherwise converts
+// poll.ErrFileClosing to ErrClosed and wraps the error in a PathError.
 func (f *File) wrapErr(op string, err error) error {
 	if err == nil || err == io.EOF {
 		return err
@@ -263,12 +339,42 @@ func (f *File) wrapErr(op string, err error) error {
 	return &PathError{op, f.name, err}
 }
 
-func TempDir() string { return tempDir() }
+// TempDir returns the default directory to use for temporary files.
+//
+// On Unix systems, it returns $TMPDIR if non-empty, else /tmp.
+// On Windows, it uses GetTempPath, returning the first non-empty
+// value from %TMP%, %TEMP%, %USERPROFILE%, or the Windows directory.
+// On Plan 9, it returns /tmp.
+//
+// The directory is neither guaranteed to exist nor have accessible
+// permissions.
+func TempDir() string {
+	return tempDir()
+}
 
+// UserCacheDir returns the default root directory to use for user-specific
+// cached data. Users should create their own application-specific subdirectory
+// within this one and use that.
+//
+// On Unix systems, it returns $XDG_CACHE_HOME as specified by
+// https://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html if
+// non-empty, else $HOME/.cache.
+// On Darwin, it returns $HOME/Library/Caches.
+// On Windows, it returns %LocalAppData%.
+// On Plan 9, it returns $home/lib/cache.
+//
+// If the location cannot be determined (for example, $HOME is not defined),
+// then it will return an error.
 func UserCacheDir() (string, error) {
 	var dir string
 
 	switch runtime.GOOS {
+	case "windows":
+		dir = Getenv("LocalAppData")
+		if dir == "" {
+			return "", errors.New("%LocalAppData% is not defined")
+		}
+
 	case "darwin":
 		dir = Getenv("HOME")
 		if dir == "" {
@@ -314,6 +420,12 @@ func UserConfigDir() (string, error) {
 	var dir string
 
 	switch runtime.GOOS {
+	case "windows":
+		dir = Getenv("AppData")
+		if dir == "" {
+			return "", errors.New("%AppData% is not defined")
+		}
+
 	case "darwin":
 		dir = Getenv("HOME")
 		if dir == "" {
@@ -350,6 +462,8 @@ func UserConfigDir() (string, error) {
 func UserHomeDir() (string, error) {
 	env, enverr := "HOME", "$HOME"
 	switch runtime.GOOS {
+	case "windows":
+		env, enverr = "USERPROFILE", "%userprofile%"
 	case "plan9":
 		env, enverr = "home", "$home"
 	}
@@ -370,159 +484,79 @@ func UserHomeDir() (string, error) {
 	return "", errors.New(enverr + " is not defined")
 }
 
-func Chmod(name string, mode FileMode) error       { return chmod(name, mode) }
-func (f *File) Chmod(mode FileMode) error          { return f.chmod(mode) }
-func (f *File) SetDeadline(t time.Time) error      { return f.setDeadline(t) }
-func (f *File) SetReadDeadline(t time.Time) error  { return f.setReadDeadline(t) }
-func (f *File) SetWriteDeadline(t time.Time) error { return f.setWriteDeadline(t) }
+// Chmod changes the mode of the named file to mode.
+// If the file is a symbolic link, it changes the mode of the link's target.
+// If there is an error, it will be of type *PathError.
+//
+// A different subset of the mode bits are used, depending on the
+// operating system.
+//
+// On Unix, the mode's permission bits, ModeSetuid, ModeSetgid, and
+// ModeSticky are used.
+//
+// On Windows, only the 0200 bit (owner writable) of mode is used; it
+// controls whether the file's read-only attribute is set or cleared.
+// The other bits are currently unused. For compatibility with Go 1.12
+// and earlier, use a non-zero mode. Use mode 0400 for a read-only
+// file and 0600 for a readable+writable file.
+//
+// On Plan 9, the mode's permission bits, ModeAppend, ModeExclusive,
+// and ModeTemporary are used.
+func Chmod(name string, mode FileMode) error { return chmod(name, mode) }
 
+// Chmod changes the mode of the file to mode.
+// If there is an error, it will be of type *PathError.
+func (f *File) Chmod(mode FileMode) error { return f.chmod(mode) }
+
+// SetDeadline sets the read and write deadlines for a File.
+// It is equivalent to calling both SetReadDeadline and SetWriteDeadline.
+//
+// Only some kinds of files support setting a deadline. Calls to SetDeadline
+// for files that do not support deadlines will return ErrNoDeadline.
+// On most systems ordinary files do not support deadlines, but pipes do.
+//
+// A deadline is an absolute time after which I/O operations fail with an
+// error instead of blocking. The deadline applies to all future and pending
+// I/O, not just the immediately following call to Read or Write.
+// After a deadline has been exceeded, the connection can be refreshed
+// by setting a deadline in the future.
+//
+// An error returned after a timeout fails will implement the
+// Timeout method, and calling the Timeout method will return true.
+// The PathError and SyscallError types implement the Timeout method.
+// In general, call IsTimeout to test whether an error indicates a timeout.
+//
+// An idle timeout can be implemented by repeatedly extending
+// the deadline after successful Read or Write calls.
+//
+// A zero value for t means I/O operations will not time out.
+func (f *File) SetDeadline(t time.Time) error {
+	return f.setDeadline(t)
+}
+
+// SetReadDeadline sets the deadline for future Read calls and any
+// currently-blocked Read call.
+// A zero value for t means Read will not time out.
+// Not all files support setting deadlines; see SetDeadline.
+func (f *File) SetReadDeadline(t time.Time) error {
+	return f.setReadDeadline(t)
+}
+
+// SetWriteDeadline sets the deadline for any future Write calls and any
+// currently-blocked Write call.
+// Even if Write times out, it may return n > 0, indicating that
+// some of the data was successfully written.
+// A zero value for t means Write will not time out.
+// Not all files support setting deadlines; see SetDeadline.
+func (f *File) SetWriteDeadline(t time.Time) error {
+	return f.setWriteDeadline(t)
+}
+
+// SyscallConn returns a raw file.
+// This implements the syscall.Conn interface.
 func (f *File) SyscallConn() (syscall.RawConn, error) {
 	if err := f.checkValid("SyscallConn"); err != nil {
 		return nil, err
 	}
 	return newRawConn(f)
-}
-
-// isWindowsNulName reports whether name is os.DevNull ('NUL') on Windows.
-// True is returned if name is 'NUL' whatever the case.
-func isWindowsNulName(name string) bool {
-	if len(name) != 3 {
-		return false
-	}
-	if name[0] != 'n' && name[0] != 'N' {
-		return false
-	}
-	if name[1] != 'u' && name[1] != 'U' {
-		return false
-	}
-	if name[2] != 'l' && name[2] != 'L' {
-		return false
-	}
-	return true
-}
-
-func sigpipe() // implemented in package runtime
-
-func syscallMode(i FileMode) (o uint32) {
-	o |= uint32(i.Perm())
-	if i&ModeSetuid != 0 {
-		o |= syscall.S_ISUID
-	}
-	if i&ModeSetgid != 0 {
-		o |= syscall.S_ISGID
-	}
-	if i&ModeSticky != 0 {
-		o |= syscall.S_ISVTX
-	}
-	// No mapping for Go's ModeTemporary (plan9 only).
-	return
-}
-
-func chmod(name string, mode FileMode) error {
-	if e := syscall.Chmod(fixLongPath(name), syscallMode(mode)); e != nil {
-		return &PathError{"chmod", name, e}
-	}
-	return nil
-}
-
-func (f *File) chmod(mode FileMode) error {
-	if err := f.checkValid("chmod"); err != nil {
-		return err
-	}
-	if e := f.pfd.Fchmod(syscallMode(mode)); e != nil {
-		return f.wrapErr("chmod", e)
-	}
-	return nil
-}
-
-func Chown(name string, uid, gid int) error {
-	if e := syscall.Chown(name, uid, gid); e != nil {
-		return &PathError{"chown", name, e}
-	}
-	return nil
-}
-
-func Lchown(name string, uid, gid int) error {
-	if e := syscall.Lchown(name, uid, gid); e != nil {
-		return &PathError{"lchown", name, e}
-	}
-	return nil
-}
-
-func (f *File) Chown(uid, gid int) error {
-	if err := f.checkValid("chown"); err != nil {
-		return err
-	}
-	if e := f.pfd.Fchown(uid, gid); e != nil {
-		return f.wrapErr("chown", e)
-	}
-	return nil
-}
-
-func (f *File) Truncate(size int64) error {
-	if err := f.checkValid("truncate"); err != nil {
-		return err
-	}
-	if e := f.pfd.Ftruncate(size); e != nil {
-		return f.wrapErr("truncate", e)
-	}
-	return nil
-}
-
-func (f *File) Sync() error {
-	if err := f.checkValid("sync"); err != nil {
-		return err
-	}
-	if e := f.pfd.Fsync(); e != nil {
-		return f.wrapErr("sync", e)
-	}
-	return nil
-}
-
-func Chtimes(name string, atime time.Time, mtime time.Time) error {
-	var utimes [2]syscall.Timespec
-	utimes[0] = syscall.NsecToTimespec(atime.UnixNano())
-	utimes[1] = syscall.NsecToTimespec(mtime.UnixNano())
-	if e := syscall.UtimesNano(fixLongPath(name), utimes[0:]); e != nil {
-		return &PathError{"chtimes", name, e}
-	}
-	return nil
-}
-
-func (f *File) Chdir() error {
-	if err := f.checkValid("chdir"); err != nil {
-		return err
-	}
-	if e := f.pfd.Fchdir(); e != nil {
-		return f.wrapErr("chdir", e)
-	}
-	return nil
-}
-
-func (f *File) setDeadline(t time.Time) error {
-	if err := f.checkValid("SetDeadline"); err != nil {
-		return err
-	}
-	return f.pfd.SetDeadline(t)
-}
-
-func (f *File) setReadDeadline(t time.Time) error {
-	if err := f.checkValid("SetReadDeadline"); err != nil {
-		return err
-	}
-	return f.pfd.SetReadDeadline(t)
-}
-
-func (f *File) setWriteDeadline(t time.Time) error {
-	if err := f.checkValid("SetWriteDeadline"); err != nil {
-		return err
-	}
-	return f.pfd.SetWriteDeadline(t)
-}
-
-func (f *File) checkValid(op string) error {
-	if f == nil {
-		return ErrInvalid
-	}
-	return nil
 }

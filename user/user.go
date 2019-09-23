@@ -1,8 +1,22 @@
+// Copyright 2011 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+/*
+Package user allows user account lookups by name or id.
+
+For most Unix systems, this package has two internal implementations of
+resolving user and group ids to names. One is written in pure Go and
+parses /etc/passwd and /etc/group. The other is cgo-based and relies on
+the standard C library (libc) routines such as getpwuid_r and getgrnam_r.
+
+When cgo is available, cgo-based (libc-backed) code is used by default.
+This can be overridden by using osusergo build tag, which enforces
+the pure Go implementation.
+*/
 package user
 
 import (
-	"errors"
-	"runtime"
 	"strconv"
 )
 
@@ -10,27 +24,6 @@ var (
 	userImplemented  = true // set to false by lookup_stubs.go's init
 	groupImplemented = true // set to false by lookup_stubs.go's init
 )
-
-func UserCacheDir() (string, error) {
-	dir := Getenv("XDG_CACHE_HOME")
-	if dir == "" {
-		dir = Getenv("HOME")
-		if dir == "" {
-			return "", errors.New("neither $XDG_CACHE_HOME nor $HOME are defined")
-		}
-		dir += "/.cache"
-	}
-	return dir, nil
-}
-
-func UserHomeDir() string {
-	switch runtime.GOOS {
-	case "nacl", "android":
-		return "/"
-	default:
-		return Getenv("HOME")
-	}
-}
 
 // User represents a user account.
 type User struct {
