@@ -1,13 +1,6 @@
-// Copyright 2010 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// General environment variables.
-
 package os
 
 import (
-	"internal/testlog"
 	"syscall"
 )
 
@@ -99,7 +92,6 @@ func getShellName(s string) (string, int) {
 // It returns the value, which will be empty if the variable is not present.
 // To distinguish between an empty value and an unset value, use LookupEnv.
 func Getenv(key string) string {
-	testlog.Getenv(key)
 	v, _ := syscall.Getenv(key)
 	return v
 }
@@ -110,7 +102,6 @@ func Getenv(key string) string {
 // Otherwise the returned value will be empty and the boolean will
 // be false.
 func LookupEnv(key string) (string, bool) {
-	testlog.Getenv(key)
 	return syscall.Getenv(key)
 }
 

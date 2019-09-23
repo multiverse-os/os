@@ -1,23 +1,3 @@
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// Package exec runs external commands. It wraps os.StartProcess to make it
-// easier to remap stdin and stdout, connect I/O with pipes, and do other
-// adjustments.
-//
-// Unlike the "system" library call from C and other languages, the
-// os/exec package intentionally does not invoke the system shell and
-// does not expand any glob patterns or handle other expansions,
-// pipelines, or redirections typically done by shells. The package
-// behaves more like C's "exec" family of functions. To expand glob
-// patterns, either call the shell directly, taking care to escape any
-// dangerous input, or use the path/filepath package's Glob function.
-// To expand environment variables, use package os's ExpandEnv.
-//
-// Note that the examples in this package assume a Unix system.
-// They may not run on Windows, and they do not run in the Go Playground
-// used by golang.org and godoc.org.
 package exec
 
 import (
@@ -341,9 +321,6 @@ func (c *Cmd) Run() error {
 	return c.Wait()
 }
 
-// lookExtensions finds windows executable by its dir and path.
-// It uses LookPath to try appropriate extensions.
-// lookExtensions does not search PATH, instead it converts `prog` into `.\prog`.
 func lookExtensions(path, dir string) (string, error) {
 	if filepath.Base(path) == path {
 		path = filepath.Join(".", path)
@@ -376,15 +353,6 @@ func (c *Cmd) Start() error {
 		c.closeDescriptors(c.closeAfterStart)
 		c.closeDescriptors(c.closeAfterWait)
 		return c.lookPathErr
-	}
-	if runtime.GOOS == "windows" {
-		lp, err := lookExtensions(c.Path, c.Dir)
-		if err != nil {
-			c.closeDescriptors(c.closeAfterStart)
-			c.closeDescriptors(c.closeAfterWait)
-			return err
-		}
-		c.Path = lp
 	}
 	if c.Process != nil {
 		return errors.New("exec: already started")
@@ -729,11 +697,9 @@ func minInt(a, b int) int {
 	return b
 }
 
-// dedupEnv returns a copy of env with any duplicates removed, in favor of
-// later values.
 // Items not of the normal environment "key=value" form are preserved unchanged.
 func dedupEnv(env []string) []string {
-	return dedupEnvCase(runtime.GOOS == "windows", env)
+	return dedupEnvCase(false, env)
 }
 
 // dedupEnvCase is dedupEnv with a case option for testing.
@@ -765,9 +731,6 @@ func dedupEnvCase(caseInsensitive bool, env []string) []string {
 // (or at least almost always required) on the operating system.
 // Currently this is only used for Windows.
 func addCriticalEnv(env []string) []string {
-	if runtime.GOOS != "windows" {
-		return env
-	}
 	for _, kv := range env {
 		eq := strings.Index(kv, "=")
 		if eq < 0 {
@@ -780,4 +743,16 @@ func addCriticalEnv(env []string) []string {
 		}
 	}
 	return append(env, "SYSTEMROOT="+os.Getenv("SYSTEMROOT"))
+}
+
+func init() {
+	skipStdinCopyError = func(err error) bool {
+		// Ignore EPIPE errors copying to stdin if the program
+		// completed successfully otherwise.
+		// See Issue 9173.
+		pe, ok := err.(*os.PathError)
+		return ok &&
+			pe.Op == "write" && pe.Path == "|1" &&
+			pe.Err == syscall.EPIPE
+	}
 }

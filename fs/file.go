@@ -4,10 +4,11 @@ package filesystem
 // we will implement all calls to os and reduce our overall footprint by only
 // supporting linux, android and unix
 import (
-	"os"
-	"poll"
 	"syscall"
 	"time"
+
+	os "github.com/multiverse-os/os"
+	poll "github.com/multiverse-os/os/fs/poll"
 )
 
 type File struct {
