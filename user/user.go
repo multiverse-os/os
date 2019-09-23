@@ -5,8 +5,6 @@ import (
 	"runtime"
 )
 
-// User Paths
-// Unlike the Go stdlib we will only need to support linux, posix, android
 func UserCacheDir() (string, error) {
 	dir := Getenv("XDG_CACHE_HOME")
 	if dir == "" {

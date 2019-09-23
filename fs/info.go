@@ -16,25 +16,12 @@ type FileInfo interface {
 
 type FileMode uint32
 
-func (self *FileInfo) Mode() os.FileMode {
-	return self.mode
-}
-
-func (self *FileInfo) Name() string {
-	return self.name
-}
-
-func (self *FileInfo) Size() int64 {
-	return self.size
-}
-
-func (self *FileInfo) Sys() interface{} {
-	return self.sys
-}
+func (self *FileInfo) Mode() os.FileMode { return self.mode }
+func (self *FileInfo) Name() string      { return self.name }
+func (self *FileInfo) Size() int64       { return self.size }
+func (self *FileInfo) Sys() interface{}  { return self.sys }
 
 const (
-	// The single letters are the abbreviations
-	// used by the String method's formatting.
 	ModeDir        FileMode = 1 << (32 - 1 - iota) // d: is a directory
 	ModeAppend                                     // a: append-only
 	ModeExclusive                                  // l: exclusive use
@@ -81,29 +68,10 @@ func (m FileMode) String() string {
 	return string(buf[:w])
 }
 
-// IsDir reports whether m describes a directory.
-// That is, it tests for the ModeDir bit being set in m.
-func (m FileMode) IsDir() bool {
-	return m&ModeDir != 0
-}
+func (m FileMode) IsDir() bool     { return m&ModeDir != 0 }
+func (m FileMode) IsRegular() bool { return m&ModeType == 0 }
+func (m FileMode) Perm() FileMode  { return m & ModePerm }
 
-// IsRegular reports whether m describes a regular file.
-// That is, it tests that no mode type bits are set.
-func (m FileMode) IsRegular() bool {
-	return m&ModeType == 0
-}
-
-// Perm returns the Unix permission bits in m.
-func (m FileMode) Perm() FileMode {
-	return m & ModePerm
-}
-
-// SameFile reports whether fi1 and fi2 describe the same file.
-// For example, on Unix this means that the device and inode fields
-// of the two underlying structures are identical; on other systems
-// the decision may be based on the path names.
-// SameFile only applies to results returned by this package's Stat.
-// It returns false in other cases.
 func IsDuplicate(fi1, fi2 FileInfo) bool {
 	fs1, ok1 := fi1.(*fileStat)
 	fs2, ok2 := fi2.(*fileStat)

@@ -25,16 +25,9 @@ func (f *File) Fd() uintptr {
 	if f == nil {
 		return ^(uintptr(0))
 	}
-
-	// If we put the file descriptor into nonblocking mode,
-	// then set it to blocking mode before we return it,
-	// because historically we have always returned a descriptor
-	// opened in blocking mode. The File will continue to work,
-	// but any blocking operation will tie up a thread.
 	if f.nonblock {
 		f.pfd.SetBlocking()
 	}
-
 	return uintptr(f.pfd.Sysfd)
 }
 
