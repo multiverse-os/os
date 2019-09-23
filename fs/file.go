@@ -5,6 +5,7 @@ package filesystem
 // supporting linux, android and unix
 import (
 	"os"
+	"poll"
 	"syscall"
 	"time"
 )

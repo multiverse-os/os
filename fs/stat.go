@@ -1,7 +1,6 @@
 package filesystem
 
 import (
-	"internal/testlog"
 	"syscall"
 	"time"
 )
@@ -10,12 +9,10 @@ func (fs *fileStat) Name() string { return fs.name }
 func (fs *fileStat) IsDir() bool  { return fs.Mode().IsDir() }
 
 func Stat(name string) (FileInfo, error) {
-	testlog.Stat(name)
 	return statNolog(name)
 }
 
 func Lstat(name string) (FileInfo, error) {
-	testlog.Stat(name)
 	return lstatNolog(name)
 }
 
