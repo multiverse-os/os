@@ -1,12 +1,7 @@
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package os
 
 import (
-	"internal/oserror"
-	"internal/poll"
+	poll "github.com/multiverse-os/os/poll"
 )
 
 // Portable analogs of some common system call errors.
@@ -25,11 +20,11 @@ var (
 	ErrNoDeadline = errNoDeadline() // "file type does not support deadline"
 )
 
-func errInvalid() error    { return oserror.ErrInvalid }
-func errPermission() error { return oserror.ErrPermission }
-func errExist() error      { return oserror.ErrExist }
-func errNotExist() error   { return oserror.ErrNotExist }
-func errClosed() error     { return oserror.ErrClosed }
+func errInvalid() error    { return ErrInvalid }
+func errPermission() error { return ErrPermission }
+func errExist() error      { return ErrExist }
+func errNotExist() error   { return ErrNotExist }
+func errClosed() error     { return ErrClosed }
 func errNoDeadline() error { return poll.ErrNoDeadline }
 
 type timeout interface {
@@ -132,3 +127,11 @@ func underlyingError(err error) error {
 	}
 	return err
 }
+
+var (
+	ErrInvalid    = errors.New("invalid argument")
+	ErrPermission = errors.New("permission denied")
+	ErrExist      = errors.New("file already exists")
+	ErrNotExist   = errors.New("file does not exist")
+	ErrClosed     = errors.New("file already closed")
+)
